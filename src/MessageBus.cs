@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace Poster
 {
@@ -64,6 +65,23 @@ namespace Poster
                     OnHandleMessageException?.Invoke(e);
                 }
             }
+        }
+
+        public void SendInheritance<TMessage>(TMessage message)
+        {
+            var type = typeof(TMessage);
+            foreach(var list in _handlers.Where(l => l.Key.IsAssignableFrom(type)).Select(l => l.Value))
+                foreach(var handler in list)
+                {
+                    try
+                    {
+                        handler.list(message);
+                    }
+                    catch(Exception e)
+                    {
+                        OnHandleMessageException?.Invoke(e);
+                    }
+                }
         }
     }
 }
