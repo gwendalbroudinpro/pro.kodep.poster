@@ -6,6 +6,8 @@ namespace Poster
 {
     public class MessageBus : IMessageBinder, IMessageSender
     {
+        private readonly object _handlersLock = new object();
+
         private readonly Dictionary<Type, List<(object handler, Action<object> list)>> _handlers;
 
         public event Action<Exception> OnHandleMessageException;
@@ -24,45 +26,56 @@ namespace Poster
             var type = typeof(TMessage);
 
             List<(object, Action<object>)> list = null;
-            if(_handlers.TryGetValue(type, out list))
-            {
-            }
-            else
-            {
-                list = new List<(object, Action<object>)>();
-                _handlers.Add(type, list);
-            }
 
-            list.Add((Handler, (object parameter) => Handler((TMessage) parameter)));
+            lock (_handlersLock)
+            {
+                if (_handlers.TryGetValue(type, out list))
+                {
+                }
+                else
+                {
+                    list = new List<(object, Action<object>)>();
+                    lock (_handlersLock)
+                    {
+                        _handlers.Add(type, list);
+                    }
+                }
+                list.Add((Handler, (object parameter) => Handler((TMessage)parameter)));
+            }
         }
 
         public void UnBind<TMessage>(Action<TMessage> Handler)
         {
             var type = typeof(TMessage);
 
-            if(_handlers.TryGetValue(type, out var list))
+            if (_handlers.TryGetValue(type, out var list))
             {
-                list.RemoveAll(t => Delegate.Equals(t.handler, Handler));
+                lock (_handlersLock)
+                {
+                    list.RemoveAll(t => Delegate.Equals(t.handler, Handler));
+                }
             }
         }
 
         public void Send<TMessage>(TMessage message)
         {
             var type = typeof(TMessage);
-            if(!_handlers.TryGetValue(type, out var list))
+            if (!_handlers.TryGetValue(type, out var list))
             {
                 return;
             }
-
-            foreach(var handler in list)
+            lock (_handlersLock)
             {
-                try
+                foreach (var handler in list)
                 {
-                    handler.list(message);
-                }
-                catch(Exception e)
-                {
-                    OnHandleMessageException?.Invoke(e);
+                    try
+                    {
+                        handler.list(message);
+                    }
+                    catch (Exception e)
+                    {
+                        OnHandleMessageException?.Invoke(e);
+                    }
                 }
             }
         }
@@ -70,18 +83,22 @@ namespace Poster
         public void SendInheritance<TMessage>(TMessage message)
         {
             var type = typeof(TMessage);
-            foreach(var list in _handlers.Where(l => l.Key.IsAssignableFrom(type)).Select(l => l.Value))
-                foreach(var handler in list)
-                {
-                    try
+
+            lock (_handlersLock)
+            {
+                foreach (var list in _handlers.Where(l => l.Key.IsAssignableFrom(type)).Select(l => l.Value))
+                    foreach (var handler in list)
                     {
-                        handler.list(message);
+                        try
+                        {
+                            handler.list(message);
+                        }
+                        catch (Exception e)
+                        {
+                            OnHandleMessageException?.Invoke(e);
+                        }
                     }
-                    catch(Exception e)
-                    {
-                        OnHandleMessageException?.Invoke(e);
-                    }
-                }
+            }
         }
     }
 }
