@@ -8,16 +8,16 @@ namespace Poster
     {
         private readonly object _handlersLock = new object();
 
-        private readonly Dictionary<Type, List<(object handler, Action<object> list)>> _handlers;
+        private readonly Dictionary<Type, List<(object handler, Action<object> action)>> _handlers;
 
         public event Action<Exception> OnHandleMessageException;
 
-        public MessageBus(Dictionary<Type, List<(object handler, Action<object> list)>> handlers)
+        public MessageBus(Dictionary<Type, List<(object handler, Action<object> action)>> handlers)
         {
             _handlers = handlers;
         }
 
-        public MessageBus() : this(new Dictionary<Type, List<(object handler, Action<object> list)>>())
+        public MessageBus() : this(new Dictionary<Type, List<(object handler, Action<object> action)>>())
         {
         }
 
@@ -70,7 +70,7 @@ namespace Poster
                 {
                     try
                     {
-                        handler.list(message);
+                        handler.action(message);
                     }
                     catch (Exception e)
                     {
@@ -87,11 +87,11 @@ namespace Poster
             lock (_handlersLock)
             {
                 foreach (var list in _handlers.Where(l => l.Key.IsAssignableFrom(type)).Select(l => l.Value))
-                    foreach (var handler in list)
+                    foreach (var handler in list.ToArray())
                     {
                         try
                         {
-                            handler.list(message);
+                            handler.action(message);
                         }
                         catch (Exception e)
                         {
