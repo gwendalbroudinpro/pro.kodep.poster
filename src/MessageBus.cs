@@ -61,9 +61,11 @@ namespace Poster
             {
                 return;
             }
+
+            (object handler, Action<object> action)[] copyList;
             lock (_handlersLock)
             {
-                var copyList = list.ToArray();
+                copyList = list.ToArray();
             }
             foreach (var handler in copyList)
             {
@@ -83,13 +85,14 @@ namespace Poster
         {
             var type = typeof(TMessage);
 
+            (object handler, Action<object> action)[] localHandlers;
             lock (_handlersLock)
             {
-                var localHandlers = _handlers
+                localHandlers = _handlers
                                         .Where(l => l.Key.IsAssignableFrom(type))
                                         .SelectMany(l => l.Value).ToArray();
             }
-            foreach (var handler in handlers)
+            foreach (var handler in localHandlers)
             {
                 try
                 {
