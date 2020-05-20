@@ -6,7 +6,7 @@ namespace Poster
 {
     public class MessageBus : IMessageBinder, IMessageSender
     {
-        private readonly object _handlersLock = new object();
+        private static readonly object _handlersLock = new object();
 
         private readonly Dictionary<Type, List<(object handler, Action<object> action)>> _handlers;
 
@@ -35,10 +35,7 @@ namespace Poster
                 else
                 {
                     list = new List<(object, Action<object>)>();
-                    lock (_handlersLock)
-                    {
-                        _handlers.Add(type, list);
-                    }
+                    _handlers.Add(type, list);
                 }
                 list.Add((Handler, (object parameter) => Handler((TMessage)parameter)));
             }
@@ -66,18 +63,20 @@ namespace Poster
             }
             lock (_handlersLock)
             {
-                foreach (var handler in list)
+                var copyList = list.ToArray();
+            }
+            foreach (var handler in copyList)
+            {
+                try
                 {
-                    try
-                    {
-                        handler.action(message);
-                    }
-                    catch (Exception e)
-                    {
-                        OnHandleMessageException?.Invoke(e);
-                    }
+                    handler.action(message);
+                }
+                catch (Exception e)
+                {
+                    OnHandleMessageException?.Invoke(e);
                 }
             }
+
         }
 
         public void SendInheritance<TMessage>(TMessage message)
@@ -86,18 +85,20 @@ namespace Poster
 
             lock (_handlersLock)
             {
-                foreach (var list in _handlers.Where(l => l.Key.IsAssignableFrom(type)).Select(l => l.Value))
-                    foreach (var handler in list.ToArray())
-                    {
-                        try
-                        {
-                            handler.action(message);
-                        }
-                        catch (Exception e)
-                        {
-                            OnHandleMessageException?.Invoke(e);
-                        }
-                    }
+                var localHandlers = _handlers
+                                        .Where(l => l.Key.IsAssignableFrom(type))
+                                        .SelectMany(l => l.Value).ToArray();
+            }
+            foreach (var handler in handlers)
+            {
+                try
+                {
+                    handler.action(message);
+                }
+                catch (Exception e)
+                {
+                    OnHandleMessageException?.Invoke(e);
+                }
             }
         }
     }
